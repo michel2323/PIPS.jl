@@ -10,7 +10,6 @@ MPI.Init()
 @testset "C API" begin
     # First of all, test that hs071 example works
     include("hs071_test.jl")
-    # PIPS.freeProblem(prob) # Needed before the `rm` on Windows.
 end
 
 @testset "C API Ipopt" begin

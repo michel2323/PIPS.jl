@@ -456,12 +456,13 @@ function solveProblemStruct(prob::PipsNlpProblemStruct)
     ret = ccall(Libdl.dlsym(libparpipsnlp,:PipsNlpSolveStruct), Cint, 
             (Ptr{Nothing},),
             prob.ref)
+            # Nothing)
     # @show ret
-    prob.model.set_status(Int(ret))
+    # prob.model.set_status(Int(ret))
 
-    prob.t_jl_eval_total = report_total_now(prob)
+    # prob.t_jl_eval_total = report_total_now(prob)
     # @show prob
-    return prob.model.get_status()
+    # return ret
 end
 
 function freeProblemStruct(prob::PipsNlpProblemStruct)
