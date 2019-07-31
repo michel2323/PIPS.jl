@@ -14,22 +14,27 @@ function eval_f(x::Vector{Float64})
 end
 
 function eval_g(x::Vector{Float64}, g::Vector{Float64})
+    println("eval_g_wrapper")
   # Bad: g    = zeros(2)  # Allocates new array
   # OK:  g[:] = zeros(2)  # Modifies 'in place'
   g[1] = x[1]   * x[2]   * x[3]   * x[4]
   g[2] = x[1]^2 + x[2]^2 + x[3]^2 + x[4]^2
+  @show g
 end
 
 function eval_grad_f(x::Vector{Float64}, grad_f::Vector{Float64})
+    println("eval_grad_f_wrapper")
   # Bad: grad_f    = zeros(4)  # Allocates new array
   # OK:  grad_f[:] = zeros(4)  # Modifies 'in place'
   grad_f[1] = x[1] * x[4] + x[4] * (x[1] + x[2] + x[3])
   grad_f[2] = x[1] * x[4]
   grad_f[3] = x[1] * x[4] + 1
   grad_f[4] = x[1] * (x[1] + x[2] + x[3])
+  @show grad_f
 end
 
 function eval_jac_g(x::Vector{Float64}, mode, rows::Vector{Int32}, cols::Vector{Int32}, values::Vector{Float64})
+    println("eval_jac_g_wrapper")
   if mode == :Structure
     # Constraint (row) 1
     rows[1] = 1; cols[1] = 1
@@ -52,10 +57,13 @@ function eval_jac_g(x::Vector{Float64}, mode, rows::Vector{Int32}, cols::Vector{
     values[6] = 2*x[2]  # 2,2
     values[7] = 2*x[3]  # 2,3
     values[8] = 2*x[4]  # 2,4
+    @show x
+    @show values
   end
 end
 
 function eval_h(x::Vector{Float64}, mode, rows::Vector{Int32}, cols::Vector{Int32}, obj_factor::Float64, lambda::Vector{Float64}, values::Vector{Float64})
+    println("eval_h_wrapper")
   if mode == :Structure
     # Symmetric matrix, fill the lower left triangle only
     idx = 1
@@ -93,6 +101,7 @@ function eval_h(x::Vector{Float64}, mode, rows::Vector{Int32}, cols::Vector{Int3
     values[3]  += lambda[2] * 2  # 2,2
     values[6]  += lambda[2] * 2  # 3,3
     values[10] += lambda[2] * 2  # 4,4
+    @show values
   end
 end
 

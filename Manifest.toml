@@ -218,10 +218,10 @@ deps = ["LinearAlgebra", "SparseArrays"]
 uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [[StructJuMP]]
-deps = ["Compat", "JuMP", "MathProgBase", "ReverseDiffSparse"]
-git-tree-sha1 = "af25e12c7e3d857285c0d30dae6fbedddca4ebbe"
+deps = ["DelimitedFiles", "JuMP", "Libdl", "MPI", "MathProgBase", "Printf", "ReverseDiffSparse", "SparseArrays", "StructJuMPSolverInterface"]
+path = "/home/michel/git/PIPS.jl/julia_depot/dev/StructJuMP"
 uuid = "34f15cae-5318-50c9-93d3-9feadd34e321"
-version = "0.1.0"
+version = "0.1.0+"
 
 [[StructJuMPSolverInterface]]
 deps = ["Ipopt", "JuMP", "Libdl", "MPI", "MathProgBase", "Printf", "SparseArrays", "StructJuMP"]

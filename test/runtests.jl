@@ -40,9 +40,9 @@ end
     @test Ipopt.amplexefun("-v") == 0
 end
 
-@testset "MathOptInterface" begin
-    include("MOI_wrapper.jl")
-end
+# @testset "MathOptInterface" begin
+#     include("MOI_wrapper.jl")
+# end
 
 # @testset "MathOptInterfaceIpopt" begin
 #     include("MOI_Ipopt_wrapper.jl")
