@@ -190,7 +190,7 @@ function eval_grad_f_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, grad_f_
     grad_f = unsafe_wrap(Array, grad_f_ptr, grad_len)
     grad_f[1] = x0[1] * x0[4] + x0[4] * (x0[1] + x0[2] + x0[3])
     grad_f[2] = x0[1] * x0[4]
-    grad_f[3] = x0[1] * x0[4] + 1
+    grad_f[3] = x0[1] * x0[4] + 1.0
     grad_f[4] = x0[1] * (x0[1] + x0[2] + x0[3])
 
     # TODO: Gotta think about this
@@ -207,12 +207,188 @@ function eval_jac_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64},
 	cbd::Ptr{CallBackData}
 	)
     println("eval_jac_g_wrapper")
+    data = unsafe_load(cbd)
+    userdata = data.prob
+    prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
+    rowid = Int(Int(data.row_node_id))
+    colid = Int(Int(data.col_node_id))
+    flag = Int(data.flag)
+    # n0 = prob.model.get_num_cols(0)
+    # n1 = prob.model.get_num_cols(rowid) #we can do this because of 2-level and no linking constraint
+    n0 = 4
+    # n1 = 4
+    x0 = unsafe_wrap(Array, x0_ptr, n0)
+    # x1 = unsafe_wrap(Array, x1_ptr, n1)
+    # nrow = prob.model.get_num_rows(rowid) 
+    # ncol = prob.model.get_num_cols(colid) 
+    @show x0
+    ncol = 4
+    mode = (e_col_ptr == C_NULL && i_col_ptr == C_NULL) ? (:Structure) : (:Values)
+    if flag != 1
+        if mode == :Structure
+            if colid == 0 && rowid == 0
+                # e_values = unsafe_wrap(Array,e_values_ptr,0)
+                # e_colptr = unsafe_wrap(Array,e_col_ptr,0)
+                # e_rowidx = unsafe_wrap(Array,e_row_ptr,0)
+                # i_values = unsafe_wrap(Array,i_values_ptr,0)
+                # i_colptr = unsafe_wrap(Array,i_col_ptr,0)
+                # i_rowidx = unsafe_wrap(Array,i_row_ptr,0)
+                
+                # (e_nz,i_nz) = prob.model.str_eval_jac_g(rowid,colid,flag,x0,x1,mode,e_rowidx,e_colptr,e_values,i_rowidx,i_colptr,i_values)
+                e_nz = 4
+                i_nz = 4
+            else
+                e_nz = 0
+                i_nz = 0
+            end
+            unsafe_store!(e_nz_ptr,convert(Cint,e_nz)::Cint)
+            unsafe_store!(i_nz_ptr,convert(Cint,i_nz)::Cint)
+        else
+            if colid == 0 && rowid == 0
+                e_nz = unsafe_load(e_nz_ptr)
+                @show e_nz
+                if e_nz > 0
+                    e_rowidx = unsafe_wrap(Array,e_row_ptr,e_nz)
+                    e_colptr = unsafe_wrap(Array,e_col_ptr,ncol)
+                    e_values = unsafe_wrap(Array,e_values_ptr,e_nz)
+                    e_rowidx[1] = 0; #e_colptr[1] = 0
+                    e_rowidx[2] = 1; #e_colptr[2] = 1
+                    e_rowidx[3] = 2; #e_colptr[3] = 2
+                    e_rowidx[4] = 3; #e_colptr[4] = 3
+                    e_colptr[1] = 0
+                    e_values[1] = 2*x0[1]  # 2,1
+                    e_values[2] = 2*x0[2]  # 2,2
+                    e_values[3] = 2*x0[3]  # 2,3
+                    e_values[4] = 2*x0[4]  # 2,4
+                end
+                i_nz = unsafe_load(i_nz_ptr)
+                @show i_nz
+                @show ncol
+                if i_nz > 0
+                    # Constraint (row) 2
+                    i_rowidx = unsafe_wrap(Array,i_row_ptr,i_nz)
+                    i_colptr = unsafe_wrap(Array,i_col_ptr,ncol)
+                    i_values = unsafe_wrap(Array,i_values_ptr,i_nz)
+                    i_rowidx[1] = 0;# i_colptr[1] = 0
+                    i_rowidx[2] = 1;# i_colptr[2] = 1
+                    i_rowidx[3] = 2;# i_colptr[3] = 2
+                    i_rowidx[4] = 3;# i_colptr[4] = 3
+                    i_colptr[1] = 0
+                    # prob.model.str_eval_jac_g(rowid,colid,flag,x0,x1,mode,e_rowidx,e_colptr,e_values,i_rowidx,i_colptr,i_values)
+                    # Constraint (row) 2
+                    i_values[1] = x0[2]*x0[3]*x0[4]  # 1,1
+                    i_values[2] = x0[1]*x0[3]*x0[4]  # 1,2
+                    i_values[3] = x0[1]*x0[2]*x0[4]  # 1,3
+                    i_values[4] = x0[1]*x0[2]*x0[3]  # 1,4
+                end
+                return Int32(1)
+            end
+        end
+    else
+        @assert flag == 1
+        if mode == :Structure
+            e_nz = 0
+            i_nz = 0
+            unsafe_store!(e_nz_ptr,convert(Cint,e_nz)::Cint)
+            unsafe_store!(i_nz_ptr,convert(Cint,i_nz)::Cint)
+        else
+            e_nz = unsafe_load(e_nz_ptr)
+            i_nz = unsafe_load(i_nz_ptr)
+            @assert e_nz == i_nz == 0
+        end
+    end
     return Int32(1)
 end
 
 # Hessian
 function eval_h_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, lambda_ptr::Ptr{Float64}, nz_ptr::Ptr{Cint}, values_ptr::Ptr{Float64}, row_ptr::Ptr{Cint}, col_ptr::Ptr{Cint}, cbd::Ptr{CallBackData})
     println("eval_h_wrapper")
+    data = unsafe_load(cbd)
+    userdata = data.prob
+    prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
+    rowid = Int(data.row_node_id)
+    colid = Int(data.col_node_id)
+    flag = Int(data.flag)
+    
+    high = max(rowid,colid)
+    low  = min(rowid,colid)
+    n0 = 4
+    # n0 = prob.model.get_num_cols(0) 
+    # n1 = prob.model.get_num_cols(high)
+    x0 = unsafe_wrap(Array,x0_ptr,n0)
+    ncol = 4
+    # x1 = unsafe_wrap(Array,x1_ptr,n1)
+    # ncol = prob.model.get_num_cols(low)
+    # g0 = prob.model.get_num_rows(high) 
+    lambda = unsafe_wrap(Array,lambda_ptr,2)
+    obj_factor = 1.0
+    mode = (col_ptr == C_NULL) ? (:Structure) : (:Values)
+    @show flag
+    if mode == :Structure
+		if (rowid == 0 && colid == 0) 
+            nz = 10 
+        else
+            nz = 0
+        end 
+		unsafe_store!(nz_ptr,convert(Cint,nz)::Cint)
+    else
+    	nz = unsafe_load(nz_ptr)
+        @show nz
+        if nz > 0
+            if colid == 0 && rowid == 0 
+                values = unsafe_wrap(Array, values_ptr, nz)
+                rowidx = unsafe_wrap(Array, row_ptr, nz)
+                colptr = unsafe_wrap(Array, col_ptr, ncol+1)
+                rowidx[1] = 0
+                rowidx[2] = 1
+                rowidx[3] = 2
+                rowidx[4] = 3
+                
+                rowidx[5] = 1
+                rowidx[6] = 2
+                rowidx[7] = 3
+                
+                rowidx[8] = 2
+                rowidx[9] = 3
+                
+                rowidx[10] = 3 
+                
+                colptr[1] = 0
+                colptr[2] = 4
+                colptr[3] = 7
+                colptr[4] = 9
+                colptr[5] = 10
+                # return Int32(1)
+                
+                values[1] = obj_factor * (2*x0[4])  # 1,1
+                values[2] = obj_factor * (  x0[4])  # 2,1
+                values[3] = 0                      # 2,2
+                values[4] = obj_factor * (  x0[4])  # 3,1
+                values[5] = 0                      # 3,2
+                values[6] = 0                      # 3,3
+                values[7] = obj_factor * (2*x0[1] + x0[2] + x0[3])  # 4,1
+                values[8] = obj_factor * (  x0[1])  # 4,2
+                values[9] = obj_factor * (  x0[1])  # 4,3
+                values[10] = 0                     # 4,4
+                
+                # First constraint
+                values[2] += lambda[2] * (x0[3] * x0[4])  # 2,1
+                values[4] += lambda[2] * (x0[2] * x0[4])  # 3,1
+                values[5] += lambda[2] * (x0[1] * x0[4])  # 3,2
+                values[7] += lambda[2] * (x0[2] * x0[3])  # 4,1
+                values[8] += lambda[2] * (x0[1] * x0[3])  # 4,2
+                values[9] += lambda[2] * (x0[1] * x0[2])  # 4,3
+                
+                # Second constraint
+                values[1]  += lambda[1] * 2  # 1,1
+                values[3]  += lambda[1] * 2  # 2,2
+                values[6]  += lambda[1] * 2  # 3,3
+                values[10] += lambda[1] * 2  # 4,4
+                # prob.model.str_eval_h(rowid,colid,flag,x0,x1,obj_factor,lambda,mode,rowidx,colptr,values)
+            end
+        end
+    end
+    
     return Int32(1)
 end
 
