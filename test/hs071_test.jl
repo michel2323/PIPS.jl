@@ -51,15 +51,18 @@ function prob_info_wrapper(n_ptr::Ptr{Cint}, col_lb_ptr::Ptr{Float64}, col_ub_pt
     @assert(rowid == colid)
 	
 	mode = (col_lb_ptr == C_NULL) ? (:Structure) : (:Values)
-	if(mode==:Structure)
+    @show flag, rowid, colid, mode
+	if mode==:Structure
         if flag == 1
-            if colid == 0
-                n = 4
-                m = 0
-            else
-                n = 0
-                m = 0
-            end 
+            # if colid == 0
+            #     n = 0
+            #     m = 0
+            # else
+            #     n = 0
+            #     m = 0
+            # end 
+            m = 0
+            println("Only storing this")
             unsafe_store!(m_ptr,convert(Cint,m)::Cint)
         else
             if colid == 0
@@ -73,18 +76,19 @@ function prob_info_wrapper(n_ptr::Ptr{Cint}, col_lb_ptr::Ptr{Float64}, col_ub_pt
             # m = getNumCons(instance.internalModel,id)
     		# prob.model.set_num_rows(colid, m)
     		# prob.model.set_num_cols(colid, n)
+            println("Storing m and n")
             unsafe_store!(n_ptr,convert(Cint,n)::Cint)
             unsafe_store!(m_ptr,convert(Cint,m)::Cint)
         end
 	else
         # This is for linking constraints which is not supported
         if flag == 1
-            n = unsafe_load(n_ptr)
             m = unsafe_load(m_ptr)
             @assert m==0
         else
     		n = unsafe_load(n_ptr)
     		m = unsafe_load(m_ptr)
+            @show n,m
 
     		col_lb = unsafe_wrap(Array,col_lb_ptr,n)
     		col_ub = unsafe_wrap(Array,col_ub_ptr,n)
@@ -115,6 +119,8 @@ function prob_info_wrapper(n_ptr::Ptr{Cint}, col_lb_ptr::Ptr{Float64}, col_ub_pt
         		end
         		@assert(neq+nineq == length(row_lb) == m)
             end
+            @show col_lb, col_ub
+            @show row_lb, row_ub
     		# prob.model.set_num_eq_cons(colid,neq)
     		# prob.model.set_num_ineq_cons(colid,nineq) 
         end
@@ -170,8 +176,7 @@ function eval_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, eq_g_ptr::Pt
     ineq_g = unsafe_wrap(Array, ineq_g_ptr, nineq)
     eq_g[1] = x0[1]^2 + x0[2]^2 + x0[3]^2 + x0[4]^2
     ineq_g[1] = x0[1]   * x0[2]   * x0[3]   * x0[4]
-    @show eq_g
-    @show ineq_g    
+    @show eq_g, ineq_g    
     
     return Int32(1)
 end
@@ -225,9 +230,10 @@ function eval_jac_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64},
     x1 = unsafe_wrap(Array, x1_ptr, n1)
     # nrow = prob.model.get_num_rows(rowid) 
     # ncol = prob.model.get_num_cols(colid) 
-    @show x0
+    @show x0, x1
     ncol = 1
     mode = (e_col_ptr == C_NULL && i_col_ptr == C_NULL) ? (:Structure) : (:Values)
+    @show colid, rowid, mode
     if flag != 1
         if mode == :Structure
             if colid == 0 && rowid == 0
@@ -246,18 +252,17 @@ function eval_jac_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64},
                 #     i_nz = 0
                 # end
                 println("Storing e_nz, i_nz")
-                @show e_nz
-                @show i_nz
+                @show e_nz, i_nz
                 unsafe_store!(e_nz_ptr,convert(Cint,e_nz)::Cint)
                 unsafe_store!(i_nz_ptr,convert(Cint,i_nz)::Cint)
-                @show e_nz_ptr
-                @show i_nz_ptr
             end
         else
             if colid == 0 && rowid == 0
                 e_nz = unsafe_load(e_nz_ptr)
-                @show e_nz
+                i_nz = unsafe_load(i_nz_ptr)
+                @show e_nz, i_nz
                 if e_nz > 0
+                    @show e_row_ptr, e_col_ptr, e_values_ptr
                     e_rowidx = unsafe_wrap(Array,e_row_ptr,e_nz)
                     e_colptr = unsafe_wrap(Array,e_col_ptr,ncol+1)
                     e_values = unsafe_wrap(Array,e_values_ptr,e_nz)
@@ -271,14 +276,11 @@ function eval_jac_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64},
                     e_values[2] = 2*x0[2]  # 2,2
                     e_values[3] = 2*x0[3]  # 2,3
                     e_values[4] = 2*x0[4]  # 2,4
-                    @show x0
-                    @show e_values
+                    @show x0, e_values
                 end
-                i_nz = unsafe_load(i_nz_ptr)
-                @show i_nz
-                @show ncol
                 if i_nz > 0
                     # Constraint (row) 2
+                    @show i_row_ptr, i_col_ptr, i_values_ptr
                     i_rowidx = unsafe_wrap(Array,i_row_ptr,i_nz)
                     i_colptr = unsafe_wrap(Array,i_col_ptr,ncol+1)
                     i_values = unsafe_wrap(Array,i_values_ptr,i_nz)
@@ -287,15 +289,14 @@ function eval_jac_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64},
                     i_rowidx[3] = 2;# i_colptr[3] = 2
                     i_rowidx[4] = 3;# i_colptr[4] = 3
                     i_colptr[1] = 0
-                    e_colptr[2] = 4
+                    i_colptr[2] = 4
                     # prob.model.str_eval_jac_g(rowid,colid,flag,x0,x1,mode,e_rowidx,e_colptr,e_values,i_rowidx,i_colptr,i_values)
                     # Constraint (row) 2
                     i_values[1] = x0[2]*x0[3]*x0[4]  # 1,1
                     i_values[2] = x0[1]*x0[3]*x0[4]  # 1,2
                     i_values[3] = x0[1]*x0[2]*x0[4]  # 1,3
                     i_values[4] = x0[1]*x0[2]*x0[3]  # 1,4
-                    @show x0
-                    @show i_values
+                    @show x0, i_values
                 end
                 return Int32(1)
             end
@@ -319,6 +320,7 @@ end
 # Hessian
 function eval_h_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, lambda_ptr::Ptr{Float64}, nz_ptr::Ptr{Cint}, values_ptr::Ptr{Float64}, row_ptr::Ptr{Cint}, col_ptr::Ptr{Cint}, cbd::Ptr{CallBackData})
     println("eval_h_wrapper")
+    return Int32(1)
     data = unsafe_load(cbd)
     userdata = data.prob
     prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
