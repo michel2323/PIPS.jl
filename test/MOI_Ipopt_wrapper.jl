@@ -16,12 +16,12 @@ MOIU.@model(IpoptModelData,
 
 # Without fixed_variable_treatment set, duals are not computed for variables
 # that have lower_bound == upper_bound.
-const optimizer = Ipopt.Optimizer(print_level=0, fixed_variable_treatment="make_constraint")
-const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4,
+const ipopt_optimizer = Ipopt.Optimizer(print_level=0, fixed_variable_treatment="make_constraint")
+const ipopt_config = MOIT.TestConfig(atol=1e-4, rtol=1e-4,
                                optimal_status=MOI.LOCALLY_SOLVED)
 
 @testset "SolverName" begin
-    @test MOI.get(optimizer, MOI.SolverName()) == "Ipopt"
+    @test MOI.get(ipopt_optimizer, MOI.SolverName()) == "Ipopt"
 end
 
 @testset "MOI Linear tests" begin
@@ -34,22 +34,22 @@ end
                ]
     model_for_ipopt = MOIU.UniversalFallback(IpoptModelData{Float64}())
     linear_optimizer = MOI.Bridges.SplitInterval{Float64}(
-                         MOIU.CachingOptimizer(model_for_ipopt, optimizer))
-    MOIT.contlineartest(linear_optimizer, config, exclude)
+                         MOIU.CachingOptimizer(model_for_ipopt, ipopt_optimizer))
+    MOIT.contlineartest(linear_optimizer, ipopt_config, exclude)
 end
 
 MOI.empty!(optimizer)
 
 @testset "MOI QP/QCQP tests" begin
-    qp_optimizer = MOIU.CachingOptimizer(IpoptModelData{Float64}(), optimizer)
-    MOIT.qptest(qp_optimizer, config)
+    qp_optimizer = MOIU.CachingOptimizer(IpoptModelData{Float64}(), ipopt_optimizer)
+    MOIT.qptest(qp_optimizer, ipopt_config)
     exclude = ["qcp1", # VectorAffineFunction not supported.
               ]
-    MOIT.qcptest(qp_optimizer, config, exclude)
+    MOIT.qcptest(qp_optimizer, ipopt_config, exclude)
 end
 
-MOI.empty!(optimizer)
+MOI.empty!(ipopt_optimizer)
 
 @testset "MOI NLP tests" begin
-    MOIT.nlptest(optimizer, config)
+    MOIT.nlptest(ipopt_optimizer, ipopt_config)
 end

@@ -15,14 +15,13 @@ end
 @testset "C API Ipopt" begin
     # First of all, test that hs071 example works
     include("hs071_test_ipopt.jl")
-    Ipopt.freeProblem(prob) # Needed before the `rm` on Windows.
 end
 
-# @testset "MathOptInterface" begin
-#     include("MOI_wrapper.jl")
-# end
+@testset "MathOptInterface PIPS" begin
+    include("MOI_wrapper.jl")
+end
 
-# @testset "MathOptInterfaceIpopt" begin
+# @testset "MathOptInterface Ipopt" begin
 #     include("MOI_Ipopt_wrapper.jl")
 # end
 MPI.Finalize()

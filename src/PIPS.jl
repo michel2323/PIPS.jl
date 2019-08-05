@@ -35,33 +35,33 @@ end
 
 mutable struct PipsNlpProblemStruct
     ref::Ptr{Nothing}
-    model::Ptr{Cvoid} # TODO: unclear, has to be removed
+    model # TODO: unclear, has to be removed
     comm::MPI.Comm
     prof::Bool
-
-    n_iter::Int
-    t_jl_init_x0::Float64
-    t_jl_str_prob_info::Float64
-    t_jl_eval_f::Float64
-    t_jl_eval_g::Float64
-    t_jl_eval_grad_f::Float64
-
-    t_jl_eval_jac_g::Float64
-    t_jl_str_eval_jac_g::Float64
-    t_jl_eval_h::Float64
-    t_jl_str_eval_h::Float64
-    t_jl_write_solution::Float64
-
-    t_jl_str_total::Float64
-    t_jl_eval_total::Float64
+    x::Vector{Float64}  # Final solution
+    g::Vector{Float64}  # Final constraint values
+    obj_val::Float64  # Final objective
+    n::Int 
+    x_L::Vector{Float64}
+    x_U::Vector{Float64}
+    m::Int
+    g_L::Vector{Float64}
+    g_U::Vector{Float64}
+    nele_jac::Int
+    nele_hess::Int
     
-    function PipsNlpProblemStruct(comm, model, prof)
+    n_iter::Int
+    
+    function PipsNlpProblemStruct(comm, model, prof, n::Int, x_L::Vector{Float64}, x_U::Vector{Float64},
+    m::Int, g_L::Vector{Float64}, g_U::Vector{Float64},
+    nele_jac::Int, nele_hess::Int)
         # prob = new(C_NULL, comm, prof,-3
-        prob = new(C_NULL, model, comm, prof,-3
-            ,0.0,0.0,0.0,0.0,0.0
-            ,0.0,0.0,0.0,0.0,0.0
-            ,0.0,0.0
+        prob = new(C_NULL, model, comm, prof, 
+                   zeros(Float64, n), zeros(Float64, m), 0.0,
+                   n, x_L, x_U, m, g_L, g_U, 
+                   nele_jac, nele_hess, -3
             )
+         
         finalizer(freeProblemStruct, prob)
         
         return prob
@@ -76,331 +76,53 @@ mutable struct CallBackData
     flag::Cint  
 end
 
-function str_init_x0_wrapper(x0_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
-	# @show " julia - str_init_x0_wrapper "
-    # @show cbd
-    data = unsafe_load(cbd)
-    # @show data
-    userdata = data.prob
-    prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
-    # @show prob
-    # data = unsafe_pointer_to_objref(cbd)::CallBackData
-    # out = Array(Ptr{CallBackData},1)
-    rowid = Int(Int(data.row_node_id))
-    colid = Int(Int(data.col_node_id))
-    @assert(rowid == colid)
-    n0 = prob.model.get_num_cols(colid)
-    x0 = unsafe_wrap(Array, x0_ptr, n0)
-
-    prob.model.str_init_x0(colid,x0)
-    
+function init_x0_cb(x0_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
+    println("init_x0_cb")
     return Int32(1)
 end
 
 # prob info (prob_info)
-function str_prob_info_wrapper(n_ptr::Ptr{Cint}, col_lb_ptr::Ptr{Float64}, col_ub_ptr::Ptr{Float64}, m_ptr::Ptr{Cint}, row_lb_ptr::Ptr{Float64}, row_ub_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
-    # @show " julia - str_prob_info_wrapper "
-    # @show cbd
-    data = unsafe_load(cbd)
-    # @show data
-    userdata = data.prob
-    prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
-    # @show prob
-    # data = unsafe_pointer_to_objref(cbd)::CallBackData
-    # out = Array(Ptr{CallBackData},1)
-    rowid = Int(Int(data.row_node_id))
-    colid = Int(data.col_node_id)
-    flag = Int(data.flag)
-    @assert(rowid == colid)
-	
-	mode = (col_lb_ptr == C_NULL) ? (:Structure) : (:Values)
-    # @show flag
-    if flag == 0
-        # @show mode
-    	if(mode==:Structure)
-            col_lb = unsafe_wrap(Array,col_lb_ptr,0)
-    		col_ub = unsafe_wrap(Array,col_ub_ptr,0)
-    		row_lb = unsafe_wrap(Array,row_lb_ptr,0)
-    		row_ub = unsafe_wrap(Array,row_ub_ptr,0)
-    		(n,m) = prob.model.str_prob_info(colid,flag,mode,col_lb,col_ub,row_lb,row_ub)
-
-    		unsafe_store!(n_ptr,convert(Cint,n)::Cint)
-    		unsafe_store!(m_ptr,convert(Cint,m)::Cint)
-            # @show typeof(colid), typeof(m)
-    		prob.model.set_num_rows(colid, m)
-    		prob.model.set_num_cols(colid, n)
-    	else
-    		n = unsafe_load(n_ptr)
-    		m = unsafe_load(m_ptr)
-    		col_lb = unsafe_wrap(Array,col_lb_ptr,n)
-    		col_ub = unsafe_wrap(Array,col_ub_ptr,n)
-    		row_lb = unsafe_wrap(Array,row_lb_ptr,m)
-    		row_ub = unsafe_wrap(Array,row_ub_ptr,m)
-
-    		prob.model.str_prob_info(colid,flag,mode,col_lb,col_ub,row_lb,row_ub)
-            
-
-    		neq = 0
-    		nineq = 0
-    		for i = 1:length(row_lb)
-    			if row_lb[i] == row_ub[i]
-    				neq += 1
-    			else
-    				nineq += 1
-    			end
-    		end
-    		@assert(neq+nineq == length(row_lb) == m)
-    		prob.model.set_num_eq_cons(colid,neq)
-    		prob.model.set_num_ineq_cons(colid,nineq) 
-    	end
-    else
-        @assert flag ==1
-        if mode == :Structure
-            col_lb = unsafe_wrap(Array,col_lb_ptr,0)
-            col_ub = unsafe_wrap(Array,col_ub_ptr,0)
-            row_lb = unsafe_wrap(Array,row_lb_ptr,0)
-            row_ub = unsafe_wrap(Array,row_ub_ptr,0)
-            (n,m) = prob.model.str_prob_info(colid,flag,mode,col_lb,col_ub,row_lb,row_ub)
-            # @show n,m
-            unsafe_store!(m_ptr,convert(Cint,m)::Cint)
-        else
-            n = unsafe_load(n_ptr)
-            m = unsafe_load(m_ptr)
-            @assert m==0
-        end
-    end
+function prob_info_cb(n_ptr::Ptr{Cint}, col_lb_ptr::Ptr{Float64}, col_ub_ptr::Ptr{Float64}, m_ptr::Ptr{Cint}, row_lb_ptr::Ptr{Float64}, row_ub_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
+    println("prob_info_cb")
 	return Int32(1)
 end
 # Objective (eval_f)
-function str_eval_f_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, obj_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
-    # @show " julia - eval_f_wrapper "
-    data = unsafe_load(cbd)
-    # @show data
-    # @show data
-    userdata = data.prob
-    prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
-    rowid = Int(Int(data.row_node_id))
-    colid = Int(data.col_node_id)
-    @assert(rowid == colid)
-    n0 = prob.model.get_num_cols(0)
-    n1 = prob.model.get_num_cols(colid)
-    # Calculate the new objective
-    x0 = unsafe_wrap(Array, x0_ptr, n0)
-    x1 = unsafe_wrap(Array, x1_ptr, n1)
-
-    new_obj = convert(Float64, prob.model.str_eval_f(colid,x0,x1))::Float64
-    
-    # Fill out the pointer
-    unsafe_store!(obj_ptr, new_obj)
-    # Done
+function eval_f_cb(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, obj_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
+    println("eval_f_cb")
     return Int32(1)
 end
 
 # Constraints (eval_g)
-function str_eval_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, eq_g_ptr::Ptr{Float64}, inq_g_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
-    # @show " julia - eval_g_wrapper " 
-    data = unsafe_load(cbd)
-    # @show data
-    userdata = data.prob
-    prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
-    rowid = Int(data.row_node_id)
-    colid = Int(data.col_node_id)
-    @assert(rowid == colid)
-    n0 = prob.model.get_num_cols(0)
-    n1 = prob.model.get_num_cols(colid)
-    x0 = unsafe_wrap(Array, x0_ptr, n0)
-    x1 = unsafe_wrap(Array, x1_ptr, n1)
-    # Calculate the new constraint values
-    neq = prob.model.get_num_eq_cons(rowid)
-    nineq = prob.model.get_num_ineq_cons(rowid)
-    new_eq_g = unsafe_wrap(Array, eq_g_ptr, neq)
-    new_inq_g = unsafe_wrap(Array, inq_g_ptr, nineq)
-
-    prob.model.str_eval_g(colid,x0,x1,new_eq_g,new_inq_g)
-    
-    # Done
+function eval_g_cb(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, eq_g_ptr::Ptr{Float64}, inq_g_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
+    println("eval_g_cb")
     return Int32(1)
 end
 
 # Objective gradient (eval_grad_f)
-function str_eval_grad_f_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, grad_f_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
-    # @show " julia -  eval_grad_f_wrapper "  
-    # Extract Julia the problem from the pointer
-    # @show cbd
-    data = unsafe_load(cbd)
-    # @show data
-    userdata = data.prob
-    prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
-    rowid = Int(data.row_node_id)
-    colid = Int(data.col_node_id)
-    n0 = prob.model.get_num_cols(0)
-    n1 = prob.model.get_num_cols(rowid)
-    # @show n0,n1
-    x0 = unsafe_wrap(Array, x0_ptr, n0)
-    x1 = unsafe_wrap(Array, x1_ptr, n1)
-    # Calculate the gradient
-    grad_len = prob.model.get_num_cols(colid)
-    new_grad_f = unsafe_wrap(Array, grad_f_ptr, grad_len)
-
-    prob.model.str_eval_grad_f(rowid,colid,x0,x1,new_grad_f)
-    
-    if prob.model.get_sense() == :Max
-        new_grad_f *= -1.0
-    end
-    # Done
+function eval_grad_f_cb(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, grad_f_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
+    println("eval_grad_f_cb")
     return Int32(1)
 end
 
 # Jacobian (eval_jac_g)
-function str_eval_jac_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, 
+function eval_jac_g_cb(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, 
 	e_nz_ptr::Ptr{Cint}, e_values_ptr::Ptr{Float64}, e_row_ptr::Ptr{Cint}, e_col_ptr::Ptr{Cint}, 
 	i_nz_ptr::Ptr{Cint}, i_values_ptr::Ptr{Float64}, i_row_ptr::Ptr{Cint}, i_col_ptr::Ptr{Cint},  
 	cbd::Ptr{CallBackData}
 	)
-    # @show " julia -  eval_jac_g_wrapper " 
-    # Extract Julia the problem from the pointer  
-    data = unsafe_load(cbd)
-    # @show data
-    userdata = data.prob
-    prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
-    rowid = Int(Int(data.row_node_id))
-    colid = Int(Int(data.col_node_id))
-    flag = Int(data.flag)
-    n0 = prob.model.get_num_cols(0)
-    n1 = prob.model.get_num_cols(rowid) #we can do this because of 2-level and no linking constraint
-    # @show n0, n1 
-    x0 = unsafe_wrap(Array, x0_ptr, n0)
-    x1 = unsafe_wrap(Array, x1_ptr, n1)
-    # @show x0
-    # @show x1 
-    nrow = prob.model.get_num_rows(rowid) 
-    ncol = prob.model.get_num_cols(colid) 
-    #@show prob
-    # Determine mode
-    mode = (e_col_ptr == C_NULL && i_col_ptr == C_NULL) ? (:Structure) : (:Values)
-    if flag != 1
-        if(mode == :Structure)
-        	e_values = unsafe_wrap(Array,e_values_ptr,0)
-    		e_colptr = unsafe_wrap(Array,e_col_ptr,0)
-    		e_rowidx = unsafe_wrap(Array,e_row_ptr,0)
-    		i_values = unsafe_wrap(Array,i_values_ptr,0)
-    		i_colptr = unsafe_wrap(Array,i_col_ptr,0)
-    		i_rowidx = unsafe_wrap(Array,i_row_ptr,0)
-            
-            (e_nz,i_nz) = prob.model.str_eval_jac_g(rowid,colid,flag,x0,x1,mode,e_rowidx,e_colptr,e_values,i_rowidx,i_colptr,i_values)
-            
-            unsafe_store!(e_nz_ptr,convert(Cint,e_nz)::Cint)
-    		unsafe_store!(i_nz_ptr,convert(Cint,i_nz)::Cint)
-    		# @show "structure - ",(e_nz,i_nz)
-        else
-        	e_nz = unsafe_load(e_nz_ptr)
-        	e_values = unsafe_wrap(Array,e_values_ptr,e_nz)
-        	e_rowidx = unsafe_wrap(Array,e_row_ptr,e_nz)
-        	e_colptr = unsafe_wrap(Array,e_col_ptr,ncol+1)
-        	i_nz = unsafe_load(i_nz_ptr)
-        	# @show "values - ",(e_nz,i_nz), ncol
-        	i_values = unsafe_wrap(Array,i_values_ptr,i_nz)
-        	i_rowidx = unsafe_wrap(Array,i_row_ptr,i_nz)
-        	i_colptr = unsafe_wrap(Array,i_col_ptr,ncol+1)
-            # @show x0
-            # @show x1 
-        	prob.model.str_eval_jac_g(rowid,colid,flag,x0,x1,mode,e_rowidx,e_colptr,e_values,i_rowidx,i_colptr,i_values)
-        end
-    else
-        @assert flag == 1
-        if mode == :Structure
-            e_nz = 0
-            i_nz = 0
-            unsafe_store!(e_nz_ptr,convert(Cint,e_nz)::Cint)
-            unsafe_store!(i_nz_ptr,convert(Cint,i_nz)::Cint)
-        else
-            e_nz = unsafe_load(e_nz_ptr)
-            i_nz = unsafe_load(i_nz_ptr)
-            @assert e_nz == i_nz == 0
-        end
-    end
-    # Done
+    println("eval_jac_g_cb")
     return Int32(1)
 end
 
 # Hessian
-function str_eval_h_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, lambda_ptr::Ptr{Float64}, nz_ptr::Ptr{Cint}, values_ptr::Ptr{Float64}, row_ptr::Ptr{Cint}, col_ptr::Ptr{Cint}, cbd::Ptr{CallBackData})
-    # @show " julia - eval_h_wrapper " 
-    # Extract Julia the problem from the pointer
-    data = unsafe_load(cbd)
-    # @show data
-    userdata = data.prob
-    prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
-    rowid = Int(data.row_node_id)
-    colid = Int(data.col_node_id)
-    flag = Int(data.flag)
-    # @message @sprintf(" julia - eval_h_wrapper - %d %d %d", rowid, colid, flag)
-        if rowid == colid ==0 
-            prob.n_iter += 1
-            if prob.n_iter == 0
-                prob.t_jl_str_total = t_reset(prob)
-            end
-        end
-    # @show prob.n_iter
-
-    high = max(rowid,colid)
-    low  = min(rowid,colid)
-    n0 = prob.model.get_num_cols(0) 
-    n1 = prob.model.get_num_cols(high)
-    x0 = unsafe_wrap(Array,x0_ptr,n0)
-    x1 = unsafe_wrap(Array,x1_ptr,n1)
-    # @show x0
-    # @show x1
-    ncol = prob.model.get_num_cols(low)
-    g0 = prob.model.get_num_rows(high) 
-    # @show g0
-    # @show ncol
-    lambda = unsafe_wrap(Array,lambda_ptr,g0)
-    obj_factor = 1.0
-    if prob.model.get_sense() == :Max
-        obj_factor *= -1.0
-    end
-    # Did the user specify a Hessian
-    mode = (col_ptr == C_NULL) ? (:Structure) : (:Values)
-    if(mode == :Structure)
-    	values = unsafe_wrap(Array,values_ptr,0)
-		colptr = unsafe_wrap(Array,col_ptr,0)
-		rowidx = unsafe_wrap(Array,row_ptr,0)
-        
-		nz = prob.model.str_eval_h(rowid,colid,flag, x0,x1,obj_factor,lambda,mode,rowidx,colptr,values)
-        
-		unsafe_store!(nz_ptr,convert(Cint,nz)::Cint)
-		# @show "structure - ", nz
-    else
-    	nz = unsafe_load(nz_ptr)
-    	values = unsafe_wrap(Array, values_ptr, nz)
-    	rowidx = unsafe_wrap(Array, row_ptr, nz)
-    	colptr = unsafe_wrap(Array, col_ptr, ncol+1)
-    	# @show "value - ", nz
-    	prob.model.str_eval_h(rowid,colid,flag,x0,x1,obj_factor,lambda,mode,rowidx,colptr,values)
-    end
-    # Done
+function eval_h_cb(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, lambda_ptr::Ptr{Float64}, nz_ptr::Ptr{Cint}, values_ptr::Ptr{Float64}, row_ptr::Ptr{Cint}, col_ptr::Ptr{Cint}, cbd::Ptr{CallBackData})
+    println("eval_h_cb")
     
     return Int32(1)
 end
 
 #write solution
-function str_write_solution_wrapper(x_ptr::Ptr{Float64}, y_eq_ptr::Ptr{Float64}, y_ieq_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
-    data = unsafe_load(cbd)
-    # @show data
-    userdata = data.prob
-    prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
-    rowid = Int(data.row_node_id)
-    colid = Int(data.col_node_id)
-    @assert rowid == colid
-
-    nx = prob.model.get_num_cols(rowid)
-    neq = prob.model.get_num_eq_cons(rowid)
-    nieq = prob.model.get_num_ineq_cons(rowid)
-    x = unsafe_wrap(Array,x_ptr,nx)
-    y_eq = unsafe_wrap(Array,y_eq_ptr,neq)
-    y_ieq = unsafe_wrap(Array,y_ieq_ptr,nieq)
-    prob.model.str_write_solution(rowid,x,y_eq,y_ieq)
+function write_solution_cb(x_ptr::Ptr{Float64}, y_eq_ptr::Ptr{Float64}, y_ieq_ptr::Ptr{Float64}, cbd::Ptr{CallBackData})
     
     return Int32(1)
 end
@@ -409,23 +131,25 @@ end
 # C function wrappers
 ###########################################################################
 
-function createProblemStruct(comm::MPI.Comm, model::Ptr{Cvoid}, prof::Bool)
+function createProblemStruct(comm::MPI.Comm, model, prof::Bool, numscen::Int, n::Int, x_L::Vector{Float64}, x_U::Vector{Float64},
+    m::Int, g_L::Vector{Float64}, g_U::Vector{Float64},
+    nele_jac::Int, nele_hess::Int)
 	# println(" createProblemStruct  -- julia")
     # TODO: Some callbacks to do not much
-	str_init_x0_cb = @cfunction(str_init_x0_wrapper, Cint, (Ptr{Float64}, Ptr{CallBackData}) )
-    str_prob_info_cb = @cfunction(str_prob_info_wrapper, Cint, (Ptr{Cint}, Ptr{Float64}, Ptr{Float64}, Ptr{Cint}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}) )
-    str_eval_f_cb = @cfunction(str_eval_f_wrapper,Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}) )
-    str_eval_g_cb = @cfunction(str_eval_g_wrapper,Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}) )
-    str_eval_grad_f_cb = @cfunction(str_eval_grad_f_wrapper, Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}) )
-    str_eval_jac_g_cb = @cfunction(str_eval_jac_g_wrapper, Cint, (Ptr{Float64}, Ptr{Float64}, 
+	c_init_x0_cb = @cfunction(init_x0_cb, Cint, (Ptr{Float64}, Ptr{CallBackData}) )
+    c_prob_info_cb = @cfunction(prob_info_cb, Cint, (Ptr{Cint}, Ptr{Float64}, Ptr{Float64}, Ptr{Cint}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}) )
+    c_eval_f_cb = @cfunction(eval_f_cb,Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}) )
+    c_eval_g_cb = @cfunction(eval_g_cb,Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}) )
+    c_eval_grad_f_cb = @cfunction(eval_grad_f_cb, Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}) )
+    c_eval_jac_g_cb = @cfunction(eval_jac_g_cb, Cint, (Ptr{Float64}, Ptr{Float64}, 
     	Ptr{Cint}, Ptr{Float64}, Ptr{Cint}, Ptr{Cint}, 
     	Ptr{Cint}, Ptr{Float64}, Ptr{Cint}, Ptr{Cint}, 
     	Ptr{CallBackData}))
-    str_eval_h_cb = @cfunction(str_eval_h_wrapper, Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Cint}, Ptr{Float64}, Ptr{Cint}, Ptr{Cint}, Ptr{CallBackData}))
-    str_write_solution_cb = @cfunction(str_write_solution_wrapper, Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}))
+    c_eval_h_cb = @cfunction(eval_h_cb, Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Cint}, Ptr{Float64}, Ptr{Cint}, Ptr{Cint}, Ptr{CallBackData}))
+    c_write_solution_cb = @cfunction(write_solution_cb, Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}))
     
     # println(" callback created ")
-    prob = PipsNlpProblemStruct(comm, model, prof)
+    prob = PipsNlpProblemStruct(comm, model, prof, n, x_L, x_U, m, g_L, g_U, nele_jac, nele_hess)
     # @show prob
     ret = ccall(Libdl.dlsym(libparpipsnlp,:CreatePipsNlpProblemStruct),Ptr{Nothing},
             (MPI.CComm, 
@@ -434,15 +158,15 @@ function createProblemStruct(comm::MPI.Comm, model::Ptr{Cvoid}, prof::Bool)
 	    Ptr{Nothing}, Ptr{Nothing}, Ptr{Nothing},Any
             ),
             MPI.CComm(comm), 
-            model.get_num_scen(),
-            str_init_x0_cb,
-            str_prob_info_cb,
-            str_eval_f_cb, 
-            str_eval_g_cb,
-            str_eval_grad_f_cb, 
-            str_eval_jac_g_cb, 
-            str_eval_h_cb,
-            str_write_solution_cb,
+            numscen,
+            c_init_x0_cb,
+            c_prob_info_cb,
+            c_eval_f_cb, 
+            c_eval_g_cb,
+            c_eval_grad_f_cb, 
+            c_eval_jac_g_cb, 
+            c_eval_h_cb,
+            c_write_solution_cb,
             prob
             )
     # println(" ccall CreatePipsNlpProblemStruct done ")

@@ -56,8 +56,8 @@ function prob_info_wrapper(n_ptr::Ptr{Cint}, col_lb_ptr::Ptr{Float64}, col_ub_pt
             unsafe_store!(m_ptr,convert(Cint,m)::Cint)
         else
             if colid == 0
-                n = 4
-                m = 2
+                n = prob.n
+                m = prob.m
             end 
             # n = getNumVars(instance.internalModel,id)
             # m = getNumCons(instance.internalModel,id)
@@ -82,18 +82,18 @@ function prob_info_wrapper(n_ptr::Ptr{Cint}, col_lb_ptr::Ptr{Float64}, col_ub_pt
     		row_ub = unsafe_wrap(Array,row_ub_ptr,m)
     		# prob.model.str_prob_info(colid,flag,mode,col_lb,col_ub,row_lb,row_ub)
             if colid == 0
-                col_lb[1] = 1.0
-                col_lb[2] = 1.0
-                col_lb[3] = 1.0
-                col_lb[4] = 1.0
-                col_ub[1] = 5.0
-                col_ub[2] = 5.0
-                col_ub[3] = 5.0
-                col_ub[4] = 5.0
-                row_lb[1] = 40.0
-                row_lb[2] = 25.0
-                row_ub[1] = 40.0
-                row_ub[2] = 2.0e19
+                col_lb[1] = prob.x_L[1]
+                col_lb[2] = prob.x_L[2]
+                col_lb[3] = prob.x_L[3]
+                col_lb[4] = prob.x_L[4]
+                col_ub[1] = prob.x_U[1]
+                col_ub[2] = prob.x_U[2]
+                col_ub[3] = prob.x_U[3]
+                col_ub[4] = prob.x_U[4]
+                row_lb[1] = prob.g_L[1]
+                row_lb[2] = prob.g_L[2]
+                row_ub[1] = prob.g_U[1]
+                row_ub[2] = prob.g_U[2]
         		neq = 0
         		nineq = 0
         		for i = 1:length(row_lb)
@@ -122,8 +122,8 @@ function eval_f_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, obj_ptr::Ptr
     # n0 = prob.model.get_num_cols(0)
     # n1 = prob.model.get_num_cols(colid)
     # Calculate the new objective
-    n0 = 4
-    n1 = 4
+    n0 = prob.n
+    n1 = prob.n
     x0 = unsafe_wrap(Array, x0_ptr, n0)
     x1 = unsafe_wrap(Array, x1_ptr, n1)
     obj = x0[1] * x0[4] * (x0[1] + x0[2] + x0[3]) + x0[3]
@@ -145,8 +145,8 @@ function eval_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, eq_g_ptr::Pt
     @assert(rowid == colid)
     # n0 = probd.model.get_num_cols(0)
     # n1 = prob.model.get_num_cols(colid)
-    n0 = 4
-    n1 = 4
+    n0 = prob.n
+    n1 = prob.n
     x0 = unsafe_wrap(Array, x0_ptr, n0)
     x1 = unsafe_wrap(Array, x1_ptr, n1)
     # Calculate the new constraint values
@@ -169,12 +169,12 @@ function eval_grad_f_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, grad_f_
     prob = unsafe_pointer_to_objref(userdata)::PipsNlpProblemStruct
     rowid = Int(data.row_node_id)
     colid = Int(data.col_node_id)
-    n0 = 4
-    n1 = 4
+    n0 = prob.n
+    n1 = prob.n
     x0 = unsafe_wrap(Array, x0_ptr, n0)
     x1 = unsafe_wrap(Array, x1_ptr, n1)
     # grad_len = prob.model.get_num_cols(colid)
-    grad_len = 4
+    grad_len = prob.n
     grad_f = unsafe_wrap(Array, grad_f_ptr, grad_len)
     grad_f[1] = x0[1] * x0[4] + x0[4] * (x0[1] + x0[2] + x0[3])
     grad_f[2] = x0[1] * x0[4]
@@ -202,13 +202,13 @@ function eval_jac_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64},
     flag = Int(data.flag)
     # n0 = prob.model.get_num_cols(0)
     # n1 = prob.model.get_num_cols(rowid) #we can do this because of 2-level and no linking constraint
-    n0 = 4
-    n1 = 4
+    n0 = prob.n
+    n1 = prob.n
     x0 = unsafe_wrap(Array, x0_ptr, n0)
     x1 = unsafe_wrap(Array, x1_ptr, n1)
     # nrow = prob.model.get_num_rows(rowid) 
     # ncol = prob.model.get_num_cols(colid) 
-    ncol = 4
+    ncol = prob.n
     mode = (e_col_ptr == C_NULL && i_col_ptr == C_NULL) ? (:Structure) : (:Values)
     if flag != 1
         if mode == :Structure
@@ -221,8 +221,8 @@ function eval_jac_g_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64},
                 i_rowidx = unsafe_wrap(Array,i_row_ptr,0)
                 
                 # (e_nz,i_nz) = prob.model.str_eval_jac_g(rowid,colid,flag,x0,x1,mode,e_rowidx,e_colptr,e_values,i_rowidx,i_colptr,i_values)
-                e_nz::Cint = 4
-                i_nz::Cint = 4
+                e_nz::Cint = prob.n
+                i_nz::Cint = prob.n
                 # else
                 #     e_nz = 0
                 #     i_nz = 0
@@ -303,11 +303,11 @@ function eval_h_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, lambda_ptr::
     
     high = max(rowid,colid)
     low  = min(rowid,colid)
-    n0 = 4
+    n0 = prob.n
     # n0 = prob.model.get_num_cols(0) 
     # n1 = prob.model.get_num_cols(high)
     x0 = unsafe_wrap(Array,x0_ptr,n0)
-    ncol = 4
+    ncol = prob.n
     # x1 = unsafe_wrap(Array,x1_ptr,n1)
     # ncol = prob.model.get_num_cols(low)
     # g0 = prob.model.get_num_rows(high) 
@@ -316,7 +316,7 @@ function eval_h_wrapper(x0_ptr::Ptr{Float64}, x1_ptr::Ptr{Float64}, lambda_ptr::
     mode = (col_ptr == C_NULL) ? (:Structure) : (:Values)
     if mode == :Structure
 		if (rowid == 0 && colid == 0) 
-            nz = 10 
+            nz = prob.nele_hess 
         else
             nz = 0
         end 
@@ -391,13 +391,9 @@ function write_solution_wrapper(x_ptr::Ptr{Float64}, y_eq_ptr::Ptr{Float64}, y_i
     return Int32(1)
 end
 
-function PIPScreateProblem(n::Int, x_L::Vector{Float64}, x_U::Vector{Float64},
+function PIPScreateProblem(comm::MPI.Comm, model, prof::Bool, numscen::Int, n::Int, x_L::Vector{Float64}, x_U::Vector{Float64},
     m::Int, g_L::Vector{Float64}, g_U::Vector{Float64},
     nele_jac::Int, nele_hess::Int)
-    comm = MPI.COMM_WORLD
-    prof::Bool = false
-    model = Ptr{Cvoid}(C_NULL)
-    numscen::Cint = 0
 	# println(" createProblemStruct  -- julia")
     # TODO: Some callbacks to do not much
 	str_init_x0_cb = @cfunction(init_x0_wrapper, Cint, (Ptr{Float64}, Ptr{CallBackData}) )
@@ -413,7 +409,7 @@ function PIPScreateProblem(n::Int, x_L::Vector{Float64}, x_U::Vector{Float64},
     str_write_solution_cb = @cfunction(write_solution_wrapper, Cint, (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{CallBackData}))
     
     # println(" callback created ")
-    prob = PipsNlpProblemStruct(comm, model, prof)
+    prob = PipsNlpProblemStruct(comm, model, prof, n, x_L, x_U, m, g_L, g_U, nele_jac, nele_hess)
     # @show prob
     ret = ccall(Libdl.dlsym(getPipsLib(),:CreatePipsNlpProblemStruct),Ptr{Nothing},
             (MPI.CComm, 
@@ -451,10 +447,15 @@ x_L = [1.0, 1.0, 1.0, 1.0]
 x_U = [5.0, 5.0, 5.0, 5.0]
 
 m = 2
-g_L = [25.0, 40.0]
-g_U = [2.0e19, 40.0]
+g_L = [40.0, 25.0]
+g_U = [40.0, 2.0e19]
 
-prob = PIPScreateProblem(n, x_L, x_U, m, g_L, g_U, 8, 10)
+comm = MPI.COMM_WORLD
+model = nothing
+prof = false
+numscen = 0
+
+prob = PIPScreateProblem(comm, model, prof, numscen, n, x_L, x_U, m, g_L, g_U, 8, 10)
 @test solveProblemStruct(prob) == :SUCCESSFUL_TERMINATION
 # @test PIPSRetCode(solveProblemStruct(prob)) == :SUCCESSFUL_TERMINATION
 freeProblemStruct(prob)
