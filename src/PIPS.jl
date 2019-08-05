@@ -6,6 +6,15 @@ export PipsNlpProblemStruct, CallBackData
 export createProblemStruct, solveProblemStruct, freeProblemStruct
 export getPipsLib
 
+const PIPSRetCode = Dict{Int, Symbol}(
+    0=>:SUCCESSFUL_TERMINATION,
+    1=>:NOT_FINISHED,
+    2=>:MAX_ITS_EXCEEDED,
+    3=>:INFEASIBLE,
+    4=>:NEED_FEASIBILITY_RESTORATION,
+    5=>:UNKNOWN
+    )
+
 PIPSLibfile = ENV["PIPS_NLP_PAR_SHARED_LIB"]
 if !isfile(PIPSLibfile)
     error(string("The specified shared library ([", PIPSLibfile, "]) does not exist. Make sure the ENV variable 'PIPS_NLP_PAR_SHARED_LIB' points to its location, usually in the PIPS repo at PIPS/build_pips/PIPS-NLP/libparpipsnlp.so"))
@@ -457,12 +466,11 @@ function solveProblemStruct(prob::PipsNlpProblemStruct)
             (Ptr{Nothing},),
             prob.ref)
             # Nothing)
-    # @show ret
     # prob.model.set_status(Int(ret))
 
     # prob.t_jl_eval_total = report_total_now(prob)
     # @show prob
-    # return ret
+    return PIPSRetCode[ret]
 end
 
 function freeProblemStruct(prob::PipsNlpProblemStruct)

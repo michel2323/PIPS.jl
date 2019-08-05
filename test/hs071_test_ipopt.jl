@@ -14,27 +14,22 @@ function eval_f(x::Vector{Float64})
 end
 
 function eval_g(x::Vector{Float64}, g::Vector{Float64})
-    println("eval_g_wrapper")
   # Bad: g    = zeros(2)  # Allocates new array
   # OK:  g[:] = zeros(2)  # Modifies 'in place'
   g[1] = x[1]   * x[2]   * x[3]   * x[4]
   g[2] = x[1]^2 + x[2]^2 + x[3]^2 + x[4]^2
-  @show g
 end
 
 function eval_grad_f(x::Vector{Float64}, grad_f::Vector{Float64})
-    println("eval_grad_f_wrapper")
   # Bad: grad_f    = zeros(4)  # Allocates new array
   # OK:  grad_f[:] = zeros(4)  # Modifies 'in place'
   grad_f[1] = x[1] * x[4] + x[4] * (x[1] + x[2] + x[3])
   grad_f[2] = x[1] * x[4]
   grad_f[3] = x[1] * x[4] + 1
   grad_f[4] = x[1] * (x[1] + x[2] + x[3])
-  @show grad_f
 end
 
 function eval_jac_g(x::Vector{Float64}, mode, rows::Vector{Int32}, cols::Vector{Int32}, values::Vector{Float64})
-    println("eval_jac_g_wrapper")
   if mode == :Structure
     # Constraint (row) 1
     rows[1] = 1; cols[1] = 1
@@ -57,13 +52,10 @@ function eval_jac_g(x::Vector{Float64}, mode, rows::Vector{Int32}, cols::Vector{
     values[6] = 2*x[2]  # 2,2
     values[7] = 2*x[3]  # 2,3
     values[8] = 2*x[4]  # 2,4
-    @show x
-    @show values
   end
 end
 
 function eval_h(x::Vector{Float64}, mode, rows::Vector{Int32}, cols::Vector{Int32}, obj_factor::Float64, lambda::Vector{Float64}, values::Vector{Float64})
-    println("eval_h_wrapper")
   if mode == :Structure
     # Symmetric matrix, fill the lower left triangle only
     idx = 1
@@ -101,7 +93,6 @@ function eval_h(x::Vector{Float64}, mode, rows::Vector{Int32}, cols::Vector{Int3
     values[3]  += lambda[2] * 2  # 2,2
     values[6]  += lambda[2] * 2  # 3,3
     values[10] += lambda[2] * 2  # 4,4
-    @show values
   end
 end
 
@@ -126,16 +117,5 @@ solvestat = solveProblem(prob)
 @test prob.x[4] ≈ 1.3794082897556983 atol=1e-5
 @test prob.obj_val ≈ 17.014017145179164 atol=1e-5
 
-# This tests callbacks.
-function intermediate(alg_mod::Int, iter_count::Int,
-  obj_value::Float64, inf_pr::Float64, inf_du::Float64, mu::Float64,
-  d_norm::Float64, regularization_size::Float64, alpha_du::Float64, alpha_pr::Float64,
-  ls_trials::Int)
-  return iter_count < 1  # Interrupts after one iteration.
-end
+Ipopt.freeProblem(prob) # Needed before the `rm` on Windows.
 
-setIntermediateCallback(prob, intermediate)
-
-solvestat = solveProblem(prob)
-
-@test Ipopt.ApplicationReturnStatus[solvestat] == :User_Requested_Stop
