@@ -38,7 +38,7 @@ end
     MOIT.contlineartest(linear_optimizer, ipopt_config, exclude)
 end
 
-MOI.empty!(optimizer)
+MOI.empty!(ipopt_optimizer)
 
 @testset "MOI QP/QCQP tests" begin
     qp_optimizer = MOIU.CachingOptimizer(IpoptModelData{Float64}(), ipopt_optimizer)

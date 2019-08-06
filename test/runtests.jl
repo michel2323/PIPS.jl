@@ -17,11 +17,11 @@ end
     include("hs071_test_ipopt.jl")
 end
 
+@testset "MathOptInterface Ipopt" begin
+    include("MOI_Ipopt_wrapper.jl")
+end
+
 @testset "MathOptInterface PIPS" begin
     include("MOI_wrapper.jl")
 end
-
-# @testset "MathOptInterface Ipopt" begin
-#     include("MOI_Ipopt_wrapper.jl")
-# end
 MPI.Finalize()

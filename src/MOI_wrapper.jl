@@ -672,20 +672,20 @@ function MOI.optimize!(model::Optimizer)
     prof = false
     numscen = 0
     # pr = PipsNlpProblemStruct(comm, model, prof, n, x_L, x_U, m, g_L, g_U, nele_jac, nele_hess)
-    # model.inner = createProblemStruct(comm, model, prof, numscen, 
-    #                         num_variables, x_l, x_u, num_constraints,
-    #                         constraint_lb, constraint_ub,
-    #                         length(jacobian_sparsity),
-    #                         length(hessian_sparsity))
+    model.inner = createProblemStruct(comm, model, prof, numscen,
+                            num_variables, x_l, x_u, num_constraints,
+                            constraint_lb, constraint_ub,
+                            length(jacobian_sparsity),
+                            length(hessian_sparsity))
 
-    # # If nothing is provided, the default starting value is 0.0.
-    # model.inner.x = [v.start === nothing ? 0.0 : v.start
-    #                  for v in model.variable_info]
-    # 
+    # If nothing is provided, the default starting value is 0.0.
+    model.inner.x = [v.start === nothing ? 0.0 : v.start
+                     for v in model.variable_info]
+
     # if model.nlp_dual_start === nothing
     #     model.nlp_dual_start = zeros(Float64, num_nlp_constraints)
     # end
-    # 
+    #
     # mult_g_start = [
     #     [info.dual_start for info in model.linear_le_constraints];
     #     [info.dual_start for info in model.linear_ge_constraints];
@@ -701,7 +701,7 @@ function MOI.optimize!(model::Optimizer)
     #                         for v in model.variable_info]
     # model.inner.mult_x_U = [v.upper_bound_dual_start === nothing ? 0.0 : v.lower_bound_dual_start
     #                         for v in model.variable_info]
-    # 
+
     # for (name,value) in model.options
     #     sname = string(name)
     #     if match(r"(^resto_)", sname) != nothing
@@ -709,7 +709,7 @@ function MOI.optimize!(model::Optimizer)
     #     end
     #     addOption(model.inner, sname, value)
     # end
-    # solveProblem(model.inner)
+    solveProblem(model.inner)
 end
 
 function MOI.get(model::Optimizer, ::MOI.TerminationStatus)
@@ -777,6 +777,7 @@ function MOI.get(model::Optimizer, ::MOI.DualStatus)
 end
 
 function MOI.get(model::Optimizer, ::MOI.ObjectiveValue)
+    @show model.inner
     if model.inner === nothing
         error("ObjectiveValue not available.")
     end
@@ -948,4 +949,3 @@ function MOI.get(model::Optimizer, ::MOI.NLPBlockDual)
     end
     return -1 * model.inner.mult_g[(1 + nlp_constraint_offset(model)):end]
 end
-

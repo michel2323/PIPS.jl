@@ -348,7 +348,6 @@ function solveProblem(prob::IpoptProblem)
     return Int(ret)
 end
 
-include("MPB_wrapper.jl")
-include("MOI_wrapper.jl")
+include("MOI_Ipopt_wrapper.jl")
 
 end # module
